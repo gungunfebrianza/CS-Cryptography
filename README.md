@@ -160,3 +160,150 @@ function demonstrateElGamal() {
 
 demonstrateElGamal();
 ```
+
+Schnorr Signature Scheme
+The Schnorr signature scheme, developed by Claus Schnorr, is also based on the discrete logarithm problem but is simpler and more efficient than ElGamal.
+Key Concepts
+
+Based on discrete logarithm problem
+Produces shorter, non-malleable signatures
+Provably secure in the random oracle model
+Supports native multi-signature aggregation
+Deterministic (can produce the same signature for the same message)
+
+Here's a flowchart for the Schnorr signature scheme:
+
+```mermaid
+flowchart TD
+    subgraph "Key Generation"
+    A[Select prime p and generator g of subgroup of order q] --> B[Choose random private key x from 1 to q-1]
+    B --> C[Compute public key y = g^x mod p]
+    C --> D[Public key: p, q, g, y; Private key: x]
+    end
+    
+    subgraph "Signature Generation"
+    E[Choose random k from 1 to q-1] --> F[Compute r = g^k mod p]
+    F --> G[Compute e = H of m concatenated with r]
+    G --> H[Compute s = k + x*e mod q]
+    H --> I[Signature: e, s]
+    end
+    
+    subgraph "Signature Verification"
+    J[Compute v = g^s * y^-e mod p] --> K[Compute e' = H of m concatenated with v]
+    K --> L{e == e'?}
+    L -->|Yes| M[Signature Valid]
+    L -->|No| N[Signature Invalid]
+    end
+```
+
+
+```javascript
+const crypto = require('crypto');
+const BigInt = require('big-integer');
+
+class SchnorrSignature {
+  constructor() {
+    // Default parameters
+    this.p = BigInt('13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084171');
+    this.q = BigInt('6703903964971298549787012499102923063739682910296196688861780721860882015036773488400937149083451713845015929093243025426876941405973284973216824503042085');
+    this.g = BigInt('11717829880366207009516117596335367088558084999998952205599979459063929499736583746670572176471460312928594829675428279466566527115212748467589894601965568');
+    this.x = null; // Private key
+    this.y = null; // Public key
+  }
+
+  // Generate key pair
+  generateKeyPair() {
+    // Choose random x from {1, 2, ..., q-1}
+    this.x = BigInt.randBetween(BigInt('1'), this.q.minus(BigInt('1')));
+    
+    // Calculate public key y = g^x mod p
+    this.y = this.g.modPow(this.x, this.p);
+    
+    return {
+      publicKey: {
+        p: this.p.toString(),
+        q: this.q.toString(),
+        g: this.g.toString(),
+        y: this.y.toString()
+      },
+      privateKey: {
+        p: this.p.toString(),
+        q: this.q.toString(),
+        g: this.g.toString(),
+        x: this.x.toString()
+      }
+    };
+  }
+
+  // Hash a message and a commitment to get the challenge
+  hashMessageWithCommitment(message, commitment) {
+    const hash = crypto.createHash('sha256')
+                      .update(message)
+                      .update(commitment.toString())
+                      .digest('hex');
+    return BigInt(hash, 16).mod(this.q);
+  }
+
+  // Sign a message
+  sign(message, privateKey) {
+    if (!this.x) {
+      this.x = BigInt(privateKey.x);
+      this.p = BigInt(privateKey.p);
+      this.q = BigInt(privateKey.q);
+      this.g = BigInt(privateKey.g);
+    }
+    
+    // Choose random k from {1, 2, ..., q-1}
+    const k = BigInt.randBetween(BigInt('1'), this.q.minus(BigInt('1')));
+    
+    // Calculate commitment r = g^k mod p
+    const r = this.g.modPow(k, this.p);
+    
+    // Calculate challenge e = H(m || r)
+    const e = this.hashMessageWithCommitment(message, r);
+    
+    // Calculate response s = k + x*e mod q
+    const s = k.add(this.x.multiply(e)).mod(this.q);
+    
+    return {e: e.toString(), s: s.toString()};
+  }
+
+  // Verify a signature
+  verify(message, signature, publicKey) {
+    const p = BigInt(publicKey.p);
+    const q = BigInt(publicKey.q);
+    const g = BigInt(publicKey.g);
+    const y = BigInt(publicKey.y);
+    const e = BigInt(signature.e);
+    const s = BigInt(signature.s);
+    
+    // Calculate v = g^s * y^-e mod p
+    const y_inv_e = y.modPow(e, p).modInv(p);
+    const v = g.modPow(s, p).multiply(y_inv_e).mod(p);
+    
+    // Calculate e' = H(m || v)
+    const e_prime = this.hashMessageWithCommitment(message, v);
+    
+    // Verify e == e'
+    return e.equals(e_prime);
+  }
+}
+
+// Usage example
+function demonstrateSchnorr() {
+  const schnorr = new SchnorrSignature();
+  const keyPair = schnorr.generateKeyPair();
+  console.log('Schnorr Key Pair Generated:');
+  console.log('Public Key:', keyPair.publicKey);
+  console.log('Private Key: (secret)');
+  
+  const message = 'This is a test message for Schnorr signature';
+  const signature = schnorr.sign(message, keyPair.privateKey);
+  console.log('Signature:', signature);
+  
+  const isValid = schnorr.verify(message, signature, keyPair.publicKey);
+  console.log('Signature Valid:', isValid);
+}
+
+demonstrateSchnorr();
+```
