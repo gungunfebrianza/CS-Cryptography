@@ -307,3 +307,153 @@ function demonstrateSchnorr() {
 
 demonstrateSchnorr();
 ```
+
+Lamport Signature Scheme
+The Lamport signature scheme, created by Leslie Lamport, is fundamentally different as it relies on one-way hash functions rather than number theory problems.
+Key Concepts
+
+Based on cryptographic hash functions (no complex number theory required)
+One-time use only (each key pair can only sign one message)
+Quantum-resistant (secure against quantum computer attacks)
+Produces very large signatures
+Fast verification (only requires hash computations)
+
+Here's a flowchart for the Lamport signature scheme:
+
+```mermaid
+flowchart TD
+    subgraph "Key Generation"
+    A["Choose n random values x0,0...x0,n-1"] --> B["Choose n random values x1,0...x1,n-1"]
+    B --> C["Compute y0,i = H(x0,i) for all i"]
+    C --> D["Compute y1,i = H(x1,i) for all i"]
+    D --> E["Public key: y0,0...y0,n-1, y1,0...y1,n-1"]
+    E --> F["Private key: x0,0...x0,n-1, x1,0...x1,n-1"]
+    end
+    
+    subgraph "Signature Generation"
+    G["Compute message hash: h = H(m)"] --> H["For each bit i in h"]
+    H --> I{"Bit i = 0?"}
+    I -->|Yes| J["Include x0,i in signature"]
+    I -->|No| K["Include x1,i in signature"]
+    J & K --> L["Signature: s0, s1, ..., sn-1"]
+    end
+    
+    subgraph "Signature Verification"
+    M["Compute message hash: h = H(m)"] --> N["For each bit i in h"]
+    N --> O{"Bit i = 0?"}
+    O -->|Yes| P["Check if H(si) = y0,i"]
+    O -->|No| Q["Check if H(si) = y1,i"]
+    P & Q --> R{"All checks pass?"}
+    R -->|Yes| S["Signature Valid"]
+    R -->|No| T["Signature Invalid"]
+    end
+```
+
+Javascript Implementation
+
+```javascript
+const crypto = require('crypto');
+
+class LamportSignature {
+  constructor(hashBits = 256) {
+    this.hashBits = hashBits; // Number of bits in the hash (default: 256 for SHA-256)
+  }
+
+  // Generate a random byte string
+  generateRandomBytes(length) {
+    return crypto.randomBytes(length);
+  }
+
+  // Hash a byte string
+  hash(data) {
+    return crypto.createHash('sha256').update(data).digest();
+  }
+
+  // Generate key pair
+  generateKeyPair() {
+    const privateKey = {
+      x0: Array(this.hashBits).fill().map(() => this.generateRandomBytes(32)),
+      x1: Array(this.hashBits).fill().map(() => this.generateRandomBytes(32))
+    };
+
+    const publicKey = {
+      y0: privateKey.x0.map(x => this.hash(x)),
+      y1: privateKey.x1.map(x => this.hash(x))
+    };
+
+    return { publicKey, privateKey };
+  }
+
+  // Convert a message to a hash and then to bits
+  messageToHashBits(message) {
+    const hashBytes = this.hash(Buffer.from(message));
+    const bits = [];
+    
+    // Convert hash bytes to bits
+    for (let i = 0; i < Math.min(this.hashBits, hashBytes.length * 8); i++) {
+      const byteIndex = Math.floor(i / 8);
+      const bitIndex = i % 8;
+      const bit = (hashBytes[byteIndex] >> (7 - bitIndex)) & 1;
+      bits.push(bit);
+    }
+    
+    return bits;
+  }
+
+  // Sign a message
+  sign(message, privateKey) {
+    const messageBits = this.messageToHashBits(message);
+    const signature = [];
+    
+    // For each bit in the message hash
+    for (let i = 0; i < messageBits.length; i++) {
+      // If bit is 0, use x0[i], otherwise use x1[i]
+      signature.push(messageBits[i] === 0 ? privateKey.x0[i] : privateKey.x1[i]);
+    }
+    
+    return signature;
+  }
+
+  // Verify a signature
+  verify(message, signature, publicKey) {
+    const messageBits = this.messageToHashBits(message);
+    
+    // For each bit in the message hash
+    for (let i = 0; i < messageBits.length; i++) {
+      const hashOfSignature = this.hash(signature[i]);
+      const expectedHash = messageBits[i] === 0 ? publicKey.y0[i] : publicKey.y1[i];
+      
+      // Compare hash of signature component with expected hash
+      if (Buffer.compare(hashOfSignature, expectedHash) !== 0) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+}
+
+// Helper function to demonstrate Lamport signatures
+function demonstrateLamport() {
+  const lamport = new LamportSignature(8); // Using just 8 bits for demo brevity
+  const keyPair = lamport.generateKeyPair();
+  console.log('Lamport Key Pair Generated (showing only first few elements):');
+  console.log('Public Key y0[0]:', keyPair.publicKey.y0[0].toString('hex'));
+  console.log('Public Key y1[0]:', keyPair.publicKey.y1[0].toString('hex'));
+  console.log('Private Key: (secret)');
+  
+  const message = 'This is a test message for Lamport signature';
+  const signature = lamport.sign(message, keyPair.privateKey);
+  console.log('Signature (first element):', signature[0].toString('hex'));
+  
+  const isValid = lamport.verify(message, signature, keyPair.publicKey);
+  console.log('Signature Valid:', isValid);
+  
+  // Try to verify with a modified message
+  const modifiedMessage = 'This is a MODIFIED test message for Lamport signature';
+  const isValidModified = lamport.verify(modifiedMessage, signature, keyPair.publicKey);
+  console.log('Modified Message Signature Valid:', isValidModified); // Should be false
+}
+
+demonstrateLamport();
+```
